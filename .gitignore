@@ -1,0 +1,11 @@
+# cargo stuff
+Cargo.lock
+.cargo
+
+# build stuff
+target
+
+# tempfile stuff
+.*swp
+*.swo
+*~

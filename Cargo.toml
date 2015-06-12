@@ -1,0 +1,17 @@
+[package]
+name = "maschine"
+version = "0.0.1"
+authors = ["William Light <wrl@illest.net>"]
+
+[profile.release]
+lto = true
+
+[dependencies]
+mio = "*"
+nix = "*"
+glm = "*"
+glm_color = "*"
+midi = "*"
+
+[dependencies.alsa-seq]
+path = "alsa-seq"
