@@ -17,6 +17,41 @@
 
 extern crate mio;
 
+#[derive(Copy,Clone,Debug)]
+pub enum MaschineButton {
+    Restart,
+    StepLeft,
+    StepRight,
+    Grid,
+    Play,
+    Rec,
+    Erase,
+    Shift,
+
+    Group,
+    Browse,
+    Sampling,
+    NoteRepeat,
+
+    F1,
+    F2,
+    F3,
+    Control,
+    Nav,
+    NavLeft,
+    NavRight,
+    Main,
+
+    Scene,
+    Pattern,
+    PadMode,
+    View,
+    Duplicate,
+    Select,
+    Solo,
+    Mute
+}
+
 pub trait Maschine {
     fn get_io(&mut self) -> &mut mio::Io;
 
@@ -37,4 +72,7 @@ pub trait MaschineHandler {
     fn pad_released(&mut self, &mut Maschine, pad_idx: usize) {}
 
     fn encoder_step(&mut self, &mut Maschine, encoder_idx: usize, delta: i32) {}
+
+    fn button_down(&mut self, &mut Maschine, button: MaschineButton) {}
+    fn button_up(&mut self, &mut Maschine, button: MaschineButton) {}
 }

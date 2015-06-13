@@ -41,7 +41,8 @@ mod base;
 
 use base::{
     Maschine,
-    MaschineHandler
+    MaschineHandler,
+    MaschineButton
 };
 
 const DEVICE: mio::Token = mio::Token(0);
@@ -118,7 +119,8 @@ struct MHandler<'a> {
     seq_handle: &'a SequencerHandle,
     seq_port: &'a SequencerPort<'a>,
 
-    pressure_shape: PressureShape
+    pressure_shape: PressureShape,
+    send_aftertouch: bool
 }
 
 impl<'a> MHandler<'a> {
@@ -153,6 +155,10 @@ impl<'a> MaschineHandler for MHandler<'a> {
         match self.pressure_shape {
             PressureShape::Constant(_) => return,
             _ => {}
+        }
+
+        if !self.send_aftertouch {
+            return
         }
 
         let msg = Message::PolyphonicPressure(Ch1, PAD_NOTE_MAP[pad_idx],
@@ -195,6 +201,14 @@ impl<'a> MaschineHandler for MHandler<'a> {
             maschine.set_pad_light(i, self.pad_color(), brightness);
         }
     }
+
+    fn button_down(&mut self, _: &mut Maschine, btn: MaschineButton) {
+        println!(" [+] {:?}", btn);
+    }
+
+    fn button_up(&mut self, _: &mut Maschine, btn: MaschineButton) {
+        println!(" [ ] {:?}", btn);
+    }
 }
 
 fn main() {
@@ -223,7 +237,8 @@ fn main() {
         seq_port: &seq_port,
         seq_handle: &seq_handle,
 
-        pressure_shape: PressureShape::Constant(1.0)
+        pressure_shape: PressureShape::Exponential(0.4),
+        send_aftertouch: false
     };
 
     let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));

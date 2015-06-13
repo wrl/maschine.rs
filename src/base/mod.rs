@@ -18,7 +18,8 @@
 pub mod maschine;
 pub use self::maschine::{
     Maschine,
-    MaschineHandler
+    MaschineHandler,
+    MaschineButton
 };
 
 pub mod maschine_pad;

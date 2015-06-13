@@ -24,46 +24,57 @@ use mio::{TryRead, TryWrite};
 use base::{
     Maschine,
     MaschineHandler,
+    MaschineButton,
 
     MaschinePad,
     MaschinePadStateTransition
 };
 
-#[allow(dead_code)]
-enum MikroButtons {
-    Restart = 0,
-    StepLeft,
-    StepRight,
-    Grid,
-    Play,
-    Rec,
-    Erase,
-    Shift,
+const BUTTON_REPORT_TO_MIKROBUTTONS_MAP: [[Option<MaschineButton>; 8]; 4] = [
+    [
+        Some(MaschineButton::Restart),
+        Some(MaschineButton::StepLeft),
+        Some(MaschineButton::StepRight),
+        Some(MaschineButton::Grid),
+        Some(MaschineButton::Play),
+        Some(MaschineButton::Rec),
+        Some(MaschineButton::Erase),
+        Some(MaschineButton::Shift),
+    ],
 
-    Browse,
-    Sampling,
-    Group,
-    NoteRepeat,
-    Encoder,
+    [
+        Some(MaschineButton::Group),
+        Some(MaschineButton::Browse),
+        Some(MaschineButton::Sampling),
+        Some(MaschineButton::NoteRepeat),
+        None,
+        None,
+        None,
+        None,
+    ],
 
-    F1,
-    F2,
-    F3,
-    Main,
-    Nav,
-    NavLeft,
-    NavRight,
-    Enter,
+    [
+        Some(MaschineButton::F1),
+        Some(MaschineButton::F2),
+        Some(MaschineButton::F3),
+        Some(MaschineButton::Control),
+        Some(MaschineButton::Nav),
+        Some(MaschineButton::NavLeft),
+        Some(MaschineButton::NavRight),
+        Some(MaschineButton::Main),
+    ],
 
-    Scene,
-    Pattern,
-    PadMode,
-    View,
-    Duplicate,
-    Select,
-    Solo,
-    Mute
-}
+    [
+        Some(MaschineButton::Scene),
+        Some(MaschineButton::Pattern),
+        Some(MaschineButton::PadMode),
+        Some(MaschineButton::View),
+        Some(MaschineButton::Duplicate),
+        Some(MaschineButton::Select),
+        Some(MaschineButton::Solo),
+        Some(MaschineButton::Mute),
+    ]
+];
 
 #[allow(dead_code)]
 struct ButtonReport {
@@ -115,7 +126,27 @@ impl Mikro {
     }
 
     fn read_buttons(&mut self, handler: &mut MaschineHandler, buf: &[u8]) {
-        if buf[4] > 0xF {
+        for (idx, &byte) in buf[0..4].iter().enumerate() {
+            let mut diff = (byte ^ self.buttons[idx]) as u32;
+
+            while diff != 0 {
+                let off = (diff.trailing_zeros() + 1) as usize;
+                let btn = BUTTON_REPORT_TO_MIKROBUTTONS_MAP[idx][8 - off]
+                    .expect("unknown button received from device");
+
+                if (byte & (1 << (off - 1))) != 0 {
+                    handler.button_down(self, btn);
+                } else {
+                    handler.button_up(self, btn);
+                }
+
+                diff >>= off;
+            }
+
+            self.buttons[idx] = byte;
+        }
+
+        if self.buttons[4] > 0xF {
             self.buttons[4] = buf[4];
             return
         } else if self.buttons[4] == buf[4] {
