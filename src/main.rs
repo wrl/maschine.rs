@@ -150,6 +150,11 @@ impl<'a> MaschineHandler for MHandler<'a> {
     }
 
     fn pad_aftertouch(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
+        match self.pressure_shape {
+            PressureShape::Constant(_) => return,
+            _ => {}
+        }
+
         let msg = Message::PolyphonicPressure(Ch1, PAD_NOTE_MAP[pad_idx],
                                               self.pressure_to_vel(pressure));
 
@@ -218,7 +223,7 @@ fn main() {
         seq_port: &seq_port,
         seq_handle: &seq_handle,
 
-        pressure_shape: PressureShape::Exponential(0.6),
+        pressure_shape: PressureShape::Constant(1.0)
     };
 
     let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
