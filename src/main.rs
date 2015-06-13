@@ -105,11 +105,20 @@ const PAD_NOTE_MAP: [U7; 16] = [
     48, 49, 50, 51
 ];
 
+#[allow(dead_code)]
+enum PressureShape {
+    None,
+    Exponential(f32),
+    Constant(f32)
+}
+
 struct MHandler<'a> {
     color: Hsv,
 
     seq_handle: &'a SequencerHandle,
-    seq_port: &'a SequencerPort<'a>
+    seq_port: &'a SequencerPort<'a>,
+
+    pressure_shape: PressureShape
 }
 
 impl<'a> MHandler<'a> {
@@ -120,11 +129,20 @@ impl<'a> MHandler<'a> {
          | (((rgb.green() * 255.0) as u32) << 8)
          | ((rgb.blue() * 255.0) as u32))
     }
+
+    pub fn pressure_to_vel(&self, pressure: f32) -> U7 {
+        (match self.pressure_shape {
+            PressureShape::None => pressure,
+            PressureShape::Exponential(power) => pressure.powf(power),
+            PressureShape::Constant(c_pressure) => c_pressure
+        } * 127.0) as U7
+    }
 }
 
 impl<'a> MaschineHandler for MHandler<'a> {
     fn pad_pressed(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
-        let msg = Message::NoteOn(Ch1, PAD_NOTE_MAP[pad_idx], (pressure * 127.0) as U7);
+        let msg = Message::NoteOn(Ch1, PAD_NOTE_MAP[pad_idx], self.pressure_to_vel(pressure));
+
         self.seq_port.send_message(&msg).unwrap();
         self.seq_handle.drain_output();
 
@@ -132,7 +150,9 @@ impl<'a> MaschineHandler for MHandler<'a> {
     }
 
     fn pad_aftertouch(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
-        let msg = Message::PolyphonicPressure(Ch1, PAD_NOTE_MAP[pad_idx], (pressure * 127.0) as U7);
+        let msg = Message::PolyphonicPressure(Ch1, PAD_NOTE_MAP[pad_idx],
+                                              self.pressure_to_vel(pressure));
+
         self.seq_port.send_message(&msg).unwrap();
         self.seq_handle.drain_output();
 
@@ -196,7 +216,9 @@ fn main() {
         color: Hsv::new(0.0, 1.0, 1.0),
 
         seq_port: &seq_port,
-        seq_handle: &seq_handle
+        seq_handle: &seq_handle,
+
+        pressure_shape: PressureShape::Exponential(0.6),
     };
 
     let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
