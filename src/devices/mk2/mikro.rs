@@ -47,7 +47,7 @@ const BUTTON_REPORT_TO_MIKROBUTTONS_MAP: [[Option<MaschineButton>; 8]; 4] = [
         Some(MaschineButton::Browse),
         Some(MaschineButton::Sampling),
         Some(MaschineButton::NoteRepeat),
-        None,
+        Some(MaschineButton::Encoder),
         None,
         None,
         None,
@@ -242,6 +242,14 @@ impl Maschine for Mikro {
             MaschineButton::Select => 28,
             MaschineButton::Solo => 29,
             MaschineButton::Mute => 30,
+
+            _ => {
+                // happens for buttons which don't have a light (such as the encoder).
+                // could instead return a Result indicating when something such as this
+                // happens, but whatever.
+
+                return
+            }
         };
 
         self.light_buf[idx] = (brightness * 255.0) as u8;

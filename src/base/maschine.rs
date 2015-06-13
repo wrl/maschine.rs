@@ -33,6 +33,8 @@ pub enum MaschineButton {
     Sampling,
     NoteRepeat,
 
+    Encoder,
+
     F1,
     F2,
     F3,
