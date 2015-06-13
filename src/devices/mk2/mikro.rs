@@ -129,8 +129,9 @@ impl Mikro {
         for (idx, &byte) in buf[0..4].iter().enumerate() {
             let mut diff = (byte ^ self.buttons[idx]) as u32;
 
+            let mut off = 0usize;
             while diff != 0 {
-                let off = (diff.trailing_zeros() + 1) as usize;
+                off += (diff.trailing_zeros() + 1) as usize;
                 let btn = BUTTON_REPORT_TO_MIKROBUTTONS_MAP[idx][8 - off]
                     .expect("unknown button received from device");
 
