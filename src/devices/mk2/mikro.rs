@@ -209,7 +209,7 @@ impl Maschine for Mikro {
         set_rgb_light(rgb, color, brightness);
     }
 
-    fn set_button_light(&mut self, btn: MaschineButton, brightness: f32) {
+    fn set_button_light(&mut self, btn: MaschineButton, color: u32, brightness: f32) {
         let idx = match btn {
             MaschineButton::F1 => 1,
             MaschineButton::F2 => 2,
@@ -220,7 +220,11 @@ impl Maschine for Mikro {
             MaschineButton::NavRight => 7,
             MaschineButton::Main => 8,
 
-            MaschineButton::Group => 9, // 9, 10, 11 make up rgb pair
+            MaschineButton::Group => {
+                set_rgb_light(&mut self.light_buf[9 .. 12], color, brightness);
+                return
+            },
+
             MaschineButton::Browse => 12,
             MaschineButton::Sampling => 13,
             MaschineButton::NoteRepeat => 14,
