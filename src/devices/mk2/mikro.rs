@@ -277,7 +277,7 @@ impl Maschine for Mikro {
         }
     }
 
-    fn get_pad_pressure(&mut self, pad_idx: usize) -> Result<f32, ()> {
+    fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()> {
         match pad_idx {
             0 ... 15 => Ok(self.pads[pad_idx].get_pressure()),
             _ => Err(())

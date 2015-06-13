@@ -57,7 +57,7 @@ pub enum MaschineButton {
 pub trait Maschine {
     fn get_io(&mut self) -> &mut mio::Io;
 
-    fn get_pad_pressure(&mut self, pad_idx: usize) -> Result<f32, ()>;
+    fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()>;
 
     fn set_pad_light(&mut self, pad_idx: usize, color: u32, brightness: f32);
     fn set_button_light(&mut self, btn: MaschineButton, color: u32, brightness: f32);

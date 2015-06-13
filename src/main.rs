@@ -124,7 +124,7 @@ struct MHandler<'a> {
 }
 
 impl<'a> MHandler<'a> {
-    pub fn pad_color(&self) -> u32 {
+    fn pad_color(&self) -> u32 {
         let rgb = self.color.to_rgb();
 
         ((((rgb.red() * 255.0) as u32) << 16)
@@ -132,12 +132,23 @@ impl<'a> MHandler<'a> {
          | ((rgb.blue() * 255.0) as u32))
     }
 
-    pub fn pressure_to_vel(&self, pressure: f32) -> U7 {
+    fn pressure_to_vel(&self, pressure: f32) -> U7 {
         (match self.pressure_shape {
             PressureShape::None => pressure,
             PressureShape::Exponential(power) => pressure.powf(power),
             PressureShape::Constant(c_pressure) => c_pressure
         } * 127.0) as U7
+    }
+
+    fn update_pad_colors(&self, maschine: &mut Maschine) {
+        for i in (0 .. 16) {
+            let brightness = match maschine.get_pad_pressure(i).unwrap() {
+                0.0 => PAD_RELEASED_BRIGHTNESS,
+                pressure @ _ => pressure.sqrt()
+            };
+
+            maschine.set_pad_light(i, self.pad_color(), brightness);
+        }
     }
 }
 
@@ -191,20 +202,21 @@ impl<'a> MaschineHandler for MHandler<'a> {
         }
 
         self.color.set_hue(hue);
-
-        for i in (0 .. 16) {
-            let brightness = match maschine.get_pad_pressure(i).unwrap() {
-                0.0 => PAD_RELEASED_BRIGHTNESS,
-                pressure @ _ => pressure.sqrt()
-            };
-
-            maschine.set_pad_light(i, self.pad_color(), brightness);
-        }
+        self.update_pad_colors(maschine);
     }
 
     fn button_down(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
         maschine.set_button_light(btn, 0xFFFFFF, 1.0);
         println!(" [+] {:?}", btn);
+
+        match btn {
+            MaschineButton::Encoder => {
+                self.color.set_hue(0.0);
+                self.update_pad_colors(maschine);
+            },
+
+            _ => {}
+        }
     }
 
     fn button_up(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
