@@ -202,11 +202,13 @@ impl<'a> MaschineHandler for MHandler<'a> {
         }
     }
 
-    fn button_down(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_down(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
+        maschine.set_button_light(btn, 1.0);
         println!(" [+] {:?}", btn);
     }
 
-    fn button_up(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_up(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
+        maschine.set_button_light(btn, 0.0);
         println!(" [ ] {:?}", btn);
     }
 }

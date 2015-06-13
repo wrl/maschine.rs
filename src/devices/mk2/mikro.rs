@@ -184,6 +184,14 @@ impl Mikro {
     }
 }
 
+fn set_rgb_light(rgb: &mut [u8], color: u32, brightness: f32) {
+    let brightness = brightness * 0.5;
+
+    rgb[0] = (brightness * (((color >> 16) & 0xFF) as f32)) as u8;
+    rgb[1] = (brightness * (((color >>  8) & 0xFF) as f32)) as u8;
+    rgb[2] = (brightness * (((color      ) & 0xFF) as f32)) as u8;
+}
+
 impl Maschine for Mikro {
     fn get_io(&mut self) -> &mut mio::Io {
         return &mut self.dev;
@@ -198,11 +206,45 @@ impl Maschine for Mikro {
         let offset = 31 + (pad * 3);
         let rgb = &mut self.light_buf[offset .. (offset + 3)];
 
-        let brightness = brightness * 0.5;
+        set_rgb_light(rgb, color, brightness);
+    }
 
-        rgb[0] = (brightness * (((color >> 16) & 0xFF) as f32)) as u8;
-        rgb[1] = (brightness * (((color >>  8) & 0xFF) as f32)) as u8;
-        rgb[2] = (brightness * (((color      ) & 0xFF) as f32)) as u8;
+    fn set_button_light(&mut self, btn: MaschineButton, brightness: f32) {
+        let idx = match btn {
+            MaschineButton::F1 => 1,
+            MaschineButton::F2 => 2,
+            MaschineButton::F3 => 3,
+            MaschineButton::Control => 4,
+            MaschineButton::Nav => 5,
+            MaschineButton::NavLeft => 6,
+            MaschineButton::NavRight => 7,
+            MaschineButton::Main => 8,
+
+            MaschineButton::Group => 9, // 9, 10, 11 make up rgb pair
+            MaschineButton::Browse => 12,
+            MaschineButton::Sampling => 13,
+            MaschineButton::NoteRepeat => 14,
+
+            MaschineButton::Restart => 15,
+            MaschineButton::StepLeft => 16,
+            MaschineButton::StepRight => 17,
+            MaschineButton::Grid => 18,
+            MaschineButton::Play => 19,
+            MaschineButton::Rec => 20,
+            MaschineButton::Erase => 21,
+            MaschineButton::Shift => 22,
+
+            MaschineButton::Scene => 23,
+            MaschineButton::Pattern => 24,
+            MaschineButton::PadMode => 25,
+            MaschineButton::View => 26,
+            MaschineButton::Duplicate => 27,
+            MaschineButton::Select => 28,
+            MaschineButton::Solo => 29,
+            MaschineButton::Mute => 30,
+        };
+
+        self.light_buf[idx] = (brightness * 255.0) as u8;
     }
 
     fn readable(&mut self, handler: &mut MaschineHandler) {
