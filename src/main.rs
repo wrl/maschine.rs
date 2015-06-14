@@ -15,9 +15,14 @@
 //  License along with this program.  If not, see
 //  <http://www.gnu.org/licenses/>.
 
-use std::default::Default;
 use std::path::Path;
 use std::env;
+
+use std::net::{
+    UdpSocket,
+    SocketAddrV4,
+    Ipv4Addr
+};
 
 extern crate nix;
 use nix::fcntl::{O_RDWR, O_NONBLOCK};
@@ -27,14 +32,17 @@ extern crate mio;
 extern crate glm;
 extern crate glm_color;
 
+extern crate midi;
 extern crate alsa_seq;
+use midi::*;
 use alsa_seq::*;
 
 use glm::ext::*;
 use glm_color::*;
 
-extern crate midi;
-use midi::*;
+#[macro_use(osc_args)]
+extern crate tinyosc;
+use tinyosc as osc;
 
 mod devices;
 mod base;
@@ -120,7 +128,48 @@ struct MHandler<'a> {
     seq_port: &'a SequencerPort<'a>,
 
     pressure_shape: PressureShape,
-    send_aftertouch: bool
+    send_aftertouch: bool,
+
+    osc_socket: &'a UdpSocket,
+    osc_outgoing_addr: SocketAddrV4
+}
+
+fn btn_to_osc_button_map(btn: MaschineButton) -> &'static str {
+    match btn {
+        MaschineButton::Restart => "restart",
+        MaschineButton::StepLeft => "step_left",
+        MaschineButton::StepRight => "step_right",
+        MaschineButton::Grid => "grid",
+        MaschineButton::Play => "play",
+        MaschineButton::Rec => "rec",
+        MaschineButton::Erase => "erase",
+        MaschineButton::Shift => "shift",
+
+        MaschineButton::Group => "group",
+        MaschineButton::Browse => "browse",
+        MaschineButton::Sampling => "sampling",
+        MaschineButton::NoteRepeat => "note_repeat",
+
+        MaschineButton::Encoder => "encoder",
+
+        MaschineButton::F1 => "f1",
+        MaschineButton::F2 => "f2",
+        MaschineButton::F3 => "f3",
+        MaschineButton::Control => "control",
+        MaschineButton::Nav => "nav",
+        MaschineButton::NavLeft => "nav_left",
+        MaschineButton::NavRight => "nav_right",
+        MaschineButton::Main => "main",
+
+        MaschineButton::Scene => "scene",
+        MaschineButton::Pattern => "pattern",
+        MaschineButton::PadMode => "pad_mode",
+        MaschineButton::View => "view",
+        MaschineButton::Duplicate => "duplicate",
+        MaschineButton::Select => "select",
+        MaschineButton::Solo => "solo",
+        MaschineButton::Mute => "mute"
+    }
 }
 
 impl<'a> MHandler<'a> {
@@ -149,6 +198,28 @@ impl<'a> MHandler<'a> {
 
             maschine.set_pad_light(i, self.pad_color(), brightness);
         }
+    }
+
+    fn send_osc_msg(&self, path: &str, arguments: Vec<osc::Argument>) {
+        let msg = osc::Message {
+            path: path,
+            arguments: arguments
+        };
+
+        match self.osc_socket.send_to(&*msg.serialize(), self.osc_outgoing_addr) {
+            Ok(_) => {},
+            Err(e) => println!(" :: error in send_to: {}", e)
+        }
+    }
+
+    fn send_osc_button_msg(&self, btn: MaschineButton, status: usize) {
+        self.send_osc_msg(
+            &*format!("/maschine/button/{}", btn_to_osc_button_map(btn)),
+            osc_args![status as i32]);
+    }
+
+    fn send_osc_encoder_msg(&self, delta: i32) {
+        self.send_osc_msg("/maschine/encoder", osc_args![delta]);
     }
 }
 
@@ -203,6 +274,8 @@ impl<'a> MaschineHandler for MHandler<'a> {
 
         self.color.set_hue(hue);
         self.update_pad_colors(maschine);
+
+        self.send_osc_encoder_msg(delta);
     }
 
     fn button_down(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
@@ -217,11 +290,15 @@ impl<'a> MaschineHandler for MHandler<'a> {
 
             _ => {}
         }
+
+        self.send_osc_button_msg(btn, 1);
     }
 
     fn button_up(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
         maschine.set_button_light(btn, 0xFFFFFF, 0.0);
         println!(" [ ] {:?}", btn);
+
+        self.send_osc_button_msg(btn, 0);
     }
 }
 
@@ -240,6 +317,8 @@ fn main() {
         Ok(file) => file
     };
 
+    let osc_socket = UdpSocket::bind("127.0.0.1:42434").unwrap();
+
     let seq_handle = SequencerHandle::open("maschine.rs", HandleOpenStreams::Output).unwrap();
     let seq_port = seq_handle.create_port(
         "Pads MIDI", PORT_CAPABILITY_READ | PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
@@ -252,7 +331,10 @@ fn main() {
         seq_handle: &seq_handle,
 
         pressure_shape: PressureShape::Exponential(0.4),
-        send_aftertouch: false
+        send_aftertouch: false,
+
+        osc_socket: &osc_socket,
+        osc_outgoing_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435)
     };
 
     let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));

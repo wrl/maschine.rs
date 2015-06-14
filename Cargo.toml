@@ -13,5 +13,8 @@ glm = "*"
 glm_color = "*"
 midi = "*"
 
+[dependencies.tinyosc]
+git = "https://github.com/wrl/tinyosc"
+
 [dependencies.alsa-seq]
 path = "alsa-seq"
