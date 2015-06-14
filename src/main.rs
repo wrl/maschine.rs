@@ -299,7 +299,7 @@ impl<'a> MHandler<'a> {
             arguments: arguments
         };
 
-        match self.osc_socket.send_to(&*msg.serialize(), self.osc_outgoing_addr) {
+        match self.osc_socket.send_to(&*msg.serialize().unwrap(), self.osc_outgoing_addr) {
             Ok(_) => {},
             Err(e) => println!(" :: error in send_to: {}", e)
         }
