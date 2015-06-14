@@ -54,10 +54,11 @@ use base::{
 };
 
 const DEVICE: mio::Token = mio::Token(0);
+const OSC_SOCKET: mio::Token = mio::Token(1);
 
 struct EvLoopHandler<'a> {
     dev: &'a mut Maschine,
-    handler: &'a mut MaschineHandler
+    handler: &'a mut MHandler<'a>
 }
 
 impl<'a> mio::Handler for EvLoopHandler<'a> {
@@ -68,6 +69,7 @@ impl<'a> mio::Handler for EvLoopHandler<'a> {
                 token: mio::Token, _: mio::ReadHint) {
         match token {
             DEVICE => self.dev.readable(self.handler),
+            OSC_SOCKET => self.handler.recv_osc_msg(self.dev),
             _  => panic!("unexpected token")
         }
     }
@@ -84,18 +86,20 @@ impl<'a> EvLoopHandler<'a> {
     }
 }
 
-fn ev_loop(dev: &mut Maschine, handler: &mut MaschineHandler) {
+fn ev_loop<'a>(dev: &'a mut Maschine, handler: &'a mut MHandler<'a>) {
     let mut config = mio::EventLoopConfig::default();
     config.timer_tick_ms = 20;
 
     let mut ev_loop = mio::EventLoop::configured(config).unwrap();
+
+    ev_loop.register(dev.get_io(), DEVICE).unwrap();
+    ev_loop.register(handler.osc_socket, OSC_SOCKET).unwrap();
 
     let mut handler = EvLoopHandler {
         dev: dev,
         handler: handler
     };
 
-    ev_loop.register(handler.dev.get_io(), DEVICE).unwrap();
     handler.set_timeout(&mut ev_loop);
 
     ev_loop.run(&mut handler).unwrap();
@@ -132,6 +136,46 @@ struct MHandler<'a> {
 
     osc_socket: &'a UdpSocket,
     osc_outgoing_addr: SocketAddrV4
+}
+
+fn osc_button_to_btn_map(osc_button: &str) -> Option<MaschineButton> {
+    match osc_button {
+        "restart" => Some(MaschineButton::Restart),
+        "step_left" => Some(MaschineButton::StepLeft),
+        "step_right" => Some(MaschineButton::StepRight),
+        "grid" => Some(MaschineButton::Grid),
+        "play" => Some(MaschineButton::Play),
+        "rec" => Some(MaschineButton::Rec),
+        "erase" => Some(MaschineButton::Erase),
+        "shift" => Some(MaschineButton::Shift),
+
+        "group" => Some(MaschineButton::Group),
+        "browse" => Some(MaschineButton::Browse),
+        "sampling" => Some(MaschineButton::Sampling),
+        "note_repeat" => Some(MaschineButton::NoteRepeat),
+
+        "encoder" => Some(MaschineButton::Encoder),
+
+        "f1" => Some(MaschineButton::F1),
+        "f2" => Some(MaschineButton::F2),
+        "f3" => Some(MaschineButton::F3),
+        "control" => Some(MaschineButton::Control),
+        "nav" => Some(MaschineButton::Nav),
+        "nav_left" => Some(MaschineButton::NavLeft),
+        "nav_right" => Some(MaschineButton::NavRight),
+        "main" => Some(MaschineButton::Main),
+
+        "scene" => Some(MaschineButton::Scene),
+        "pattern" => Some(MaschineButton::Pattern),
+        "pad_mode" => Some(MaschineButton::PadMode),
+        "view" => Some(MaschineButton::View),
+        "duplicate" => Some(MaschineButton::Duplicate),
+        "select" => Some(MaschineButton::Select),
+        "solo" => Some(MaschineButton::Solo),
+        "mute" => Some(MaschineButton::Mute),
+
+        _ => None
+    }
 }
 
 fn btn_to_osc_button_map(btn: MaschineButton) -> &'static str {
@@ -200,6 +244,55 @@ impl<'a> MHandler<'a> {
         }
     }
 
+    fn recv_osc_msg(&self, maschine: &mut Maschine) {
+        let mut buf = [0u8; 128];
+        let (nbytes, _) = match self.osc_socket.recv_from(&mut buf) {
+            Ok(t) => t,
+            Err(e) => {
+                println!(" :: error in recv_from(): {}", e);
+                return;
+            }
+        };
+
+        let msg = match osc::Message::deserialize(&buf[.. nbytes]) {
+            Ok(msg) => msg,
+            Err(_) => {
+                println!(" :: couldn't decode OSC message :c");
+                return;
+            }
+        };
+
+        self.handle_osc_messge(maschine, &msg);
+    }
+
+    fn handle_osc_messge(&self, maschine: &mut Maschine, msg: &osc::Message) {
+        if msg.path.starts_with("/maschine/button") {
+            let btn = match osc_button_to_btn_map(&msg.path[17 ..]) {
+                Some(btn) => btn,
+                None => return
+            };
+
+            match msg.arguments.len() {
+                1 =>
+                    maschine.set_button_light(btn, 0xFFFFFF, match msg.arguments[0] {
+                        osc::Argument::i(val) => (val as f32),
+                        osc::Argument::f(val) => val,
+                        _ => return
+                    }),
+
+                2 => {
+                    if let osc::Argument::i(color) = msg.arguments[0] {
+                        if let osc::Argument::f(brightness) = msg.arguments[1] {
+                            maschine.set_button_light(btn, (color as u32) & 0xFFFFFF, brightness);
+                        }
+                    }
+                }
+
+                _ => return
+            };
+        }
+    }
+
     fn send_osc_msg(&self, path: &str, arguments: Vec<osc::Argument>) {
         let msg = osc::Message {
             path: path,
@@ -260,44 +353,15 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), PAD_RELEASED_BRIGHTNESS);
     }
 
-    fn encoder_step(&mut self, maschine: &mut Maschine, _: usize, delta: i32) {
-        if delta > 0 {
-            println!(" :: encoder [>]");
-        } else {
-            println!(" :: encoder [<]");
-        }
-
-        let mut hue = self.color.hue() + ((delta as f32) * 0.2);
-        while hue < 0.0 {
-            hue += f32::tau();
-        }
-
-        self.color.set_hue(hue);
-        self.update_pad_colors(maschine);
-
+    fn encoder_step(&mut self, _: &mut Maschine, _: usize, delta: i32) {
         self.send_osc_encoder_msg(delta);
     }
 
-    fn button_down(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
-        maschine.set_button_light(btn, 0xFFFFFF, 1.0);
-        println!(" [+] {:?}", btn);
-
-        match btn {
-            MaschineButton::Encoder => {
-                self.color.set_hue(0.0);
-                self.update_pad_colors(maschine);
-            },
-
-            _ => {}
-        }
-
+    fn button_down(&mut self, _: &mut Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 1);
     }
 
-    fn button_up(&mut self, maschine: &mut Maschine, btn: MaschineButton) {
-        maschine.set_button_light(btn, 0xFFFFFF, 0.0);
-        println!(" [ ] {:?}", btn);
-
+    fn button_up(&mut self, _: &mut Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 0);
     }
 }
@@ -324,6 +388,8 @@ fn main() {
         "Pads MIDI", PORT_CAPABILITY_READ | PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
             .unwrap();
 
+    let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
+
     let mut handler = MHandler {
         color: Hsv::new(0.0, 1.0, 1.0),
 
@@ -336,8 +402,6 @@ fn main() {
         osc_socket: &osc_socket,
         osc_outgoing_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435)
     };
-
-    let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
 
     dev.clear_screen();
 
