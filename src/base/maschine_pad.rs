@@ -45,16 +45,16 @@ pub struct MaschinePad {
 
 impl Default for MaschinePad {
     fn default() -> Self {
-        let mut slef = MaschinePad {
+        let mut _self = MaschinePad {
             state: MaschinePadState::Unpressed,
             pressure: VecDeque::with_capacity(MEDIAN_KERNEL_LENGTH)
         };
 
         for _ in (0..MEDIAN_KERNEL_LENGTH) {
-            slef.pressure.push_back(0.0);
+            _self.pressure.push_back(0.0);
         }
 
-        slef
+        _self
     }
 }
 
@@ -63,12 +63,14 @@ impl MaschinePad {
         let mut vals: Vec<_> = self.pressure.iter().take(MEDIAN_KERNEL_LENGTH).collect();
         vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Equal));
 
+        let middle = MEDIAN_KERNEL_LENGTH / 2;
+
         if (MEDIAN_KERNEL_LENGTH & 1) == 1 {
             // odd
-            *(vals[MEDIAN_KERNEL_LENGTH / 2])
+            *(vals[middle])
         } else {
             // even
-            (*(vals[MEDIAN_KERNEL_LENGTH / 2]) + *(vals[(MEDIAN_KERNEL_LENGTH / 2) + 1])) / 2.0
+            (*(vals[middle]) + *(vals[middle + 1])) / 2.0
         }
     }
 
