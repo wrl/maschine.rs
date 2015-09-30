@@ -111,13 +111,6 @@ fn usage(prog_name: &String) {
 
 const PAD_RELEASED_BRIGHTNESS: f32 = 0.015;
 
-const PAD_NOTE_MAP: [U7; 16] = [
-    60, 61, 62, 63,
-    56, 57, 58, 59,
-    52, 53, 54, 55,
-    48, 49, 50, 51
-];
-
 #[allow(dead_code)]
 enum PressureShape {
     None,
@@ -315,6 +308,13 @@ impl<'a> MHandler<'a> {
         self.send_osc_msg("/maschine/encoder", osc_args![delta]);
     }
 }
+
+const PAD_NOTE_MAP: [U7; 16] = [
+    60, 61, 62, 63,
+    56, 57, 58, 59,
+    52, 53, 54, 55,
+    48, 49, 50, 51
+];
 
 impl<'a> MaschineHandler for MHandler<'a> {
     fn pad_pressed(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {

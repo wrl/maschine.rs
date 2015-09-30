@@ -7,7 +7,7 @@ authors = ["William Light <wrl@illest.net>"]
 lto = true
 
 [dependencies]
-mio = "*"
+mio = "0.3"
 nix = "*"
 glm = "*"
 glm_color = "*"
