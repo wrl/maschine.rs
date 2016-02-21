@@ -295,6 +295,16 @@ impl<'a> MHandler<'a> {
                 _ => return
             }
         }
+        else if msg.path.starts_with("/maschine/midi_note_base") {
+            match msg.arguments.len() {
+                1 => {
+                  if let osc::Argument::i(base) = msg.arguments[0] {
+                    maschine.set_midi_note_base(base as u8);
+                  }
+                }
+                _ => return
+            }
+        }
 
     }
 
@@ -322,15 +332,16 @@ impl<'a> MHandler<'a> {
 }
 
 const PAD_NOTE_MAP: [U7; 16] = [
-    60, 61, 62, 63,
-    56, 57, 58, 59,
-    52, 53, 54, 55,
-    48, 49, 50, 51
+    12, 13, 14, 15,
+     8,  9, 10, 11,
+     4,  5,  6,  7,
+     0,  1,  2,  3
 ];
 
 impl<'a> MaschineHandler for MHandler<'a> {
     fn pad_pressed(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
-        let msg = Message::NoteOn(Ch1, PAD_NOTE_MAP[pad_idx], self.pressure_to_vel(pressure));
+        let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
+        let msg = Message::NoteOn(Ch1, midi_note, self.pressure_to_vel(pressure));
 
         self.seq_port.send_message(&msg).unwrap();
         self.seq_handle.drain_output();
@@ -348,7 +359,8 @@ impl<'a> MaschineHandler for MHandler<'a> {
             return
         }
 
-        let msg = Message::PolyphonicPressure(Ch1, PAD_NOTE_MAP[pad_idx],
+        let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
+        let msg = Message::PolyphonicPressure(Ch1, midi_note,
                                               self.pressure_to_vel(pressure));
 
         self.seq_port.send_message(&msg).unwrap();
@@ -358,7 +370,8 @@ impl<'a> MaschineHandler for MHandler<'a> {
     }
 
     fn pad_released(&mut self, maschine: &mut Maschine, pad_idx: usize) {
-        let msg = Message::NoteOff(Ch1, PAD_NOTE_MAP[pad_idx], 0);
+        let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
+        let msg = Message::NoteOff(Ch1, midi_note, 0);
         self.seq_port.send_message(&msg).unwrap();
         self.seq_handle.drain_output();
 
