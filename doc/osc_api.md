@@ -56,3 +56,25 @@ Exception Buttons
 There are a few buttons that are only ever a specifc colour:
 * Play button *always* green
 * Rec button *always* red
+
+Pads
+----
+The OSC API also allows control over the pad colours. Changing the pad
+colours is achieved by sending 3 parameters to maschine.rs:
+* Pad number
+* Colour code (see above)
+* Brightness (see above)
+
+Pads start counting from the top left, top row, 2nd from left is #1, and
+so on. Some examples follow:
+
+```
+# top left to green, full brightness:
+oscsend localhost 42434 /maschine/pad iif 0 16384 1.0
+
+# low-mid right to blue, full:
+oscsend localhost 42434 /maschine/pad iif 11 256 1.0
+
+# bottom-mid right to red, half:
+oscsend localhost 42434 /maschine/pad iif 13 256 1.0
+```
