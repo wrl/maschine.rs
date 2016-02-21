@@ -13,6 +13,18 @@ OSC sending program, and will be used throughout this document for
 examples. As oscsend does *not* accept hex values, they are noted below in
 decimal.
 
+Setting MIDI base note
+----------------------
+Maschine.rs can be configured in what the lowest MIDI note is that is sent
+by the pads - this is useful to allow an application configure which MIDI
+notes will be sent. The default value is 48, but can be easily configured
+now.
+
+The OSC API exposes the MIDI note number as follows:
+```
+oscsend localhost 42434 /maschine/midi_note_base i 36
+```
+
 Setting On/Off and Brightness
 -----------------------------
 Most of the buttons on the Maschine are just one colour: white.

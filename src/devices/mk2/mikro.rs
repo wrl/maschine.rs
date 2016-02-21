@@ -87,7 +87,9 @@ pub struct Mikro {
     light_buf: [u8; 79],
 
     pads: [MaschinePad; 16],
-    buttons: [u8; 5]
+    buttons: [u8; 5],
+
+    midi_note_base: u8
 }
 
 impl Mikro {
@@ -118,7 +120,9 @@ impl Mikro {
             light_buf: [0u8; 79],
 
             pads: Mikro::sixteen_maschine_pads(),
-            buttons: [0, 0, 0, 0, 0x10]
+            buttons: [0, 0, 0, 0, 0x10],
+
+            midi_note_base: 48
         };
 
         _self.light_buf[0] = 0x80;
@@ -208,6 +212,14 @@ impl Maschine for Mikro {
         let rgb = &mut self.light_buf[offset .. (offset + 3)];
 
         set_rgb_light(rgb, color, brightness);
+    }
+
+    fn set_midi_note_base(&mut self, base: u8) {
+      self.midi_note_base = base;
+    }
+
+    fn get_midi_note_base(&self) -> u8 {
+      return self.midi_note_base;
     }
 
     fn set_button_light(&mut self, btn: MaschineButton, color: u32, brightness: f32) {
