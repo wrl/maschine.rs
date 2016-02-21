@@ -227,7 +227,7 @@ impl<'a> MHandler<'a> {
     }
 
     fn update_pad_colors(&self, maschine: &mut Maschine) {
-        for i in (0 .. 16) {
+        for i in 0..16 {
             let brightness = match maschine.get_pad_pressure(i).unwrap() {
                 0.0 => PAD_RELEASED_BRIGHTNESS,
                 pressure @ _ => pressure.sqrt()
@@ -417,7 +417,7 @@ fn main() {
 
     dev.clear_screen();
 
-    for i in (0..16) {
+    for i in 0..16 {
         dev.set_pad_light(i, handler.pad_color(), PAD_RELEASED_BRIGHTNESS);
     }
 

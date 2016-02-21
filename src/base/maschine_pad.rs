@@ -50,7 +50,7 @@ impl Default for MaschinePad {
             pressure: VecDeque::with_capacity(MEDIAN_KERNEL_LENGTH)
         };
 
-        for _ in (0..MEDIAN_KERNEL_LENGTH) {
+        for _ in 0..MEDIAN_KERNEL_LENGTH {
             _self.pressure.push_back(0.0);
         }
 
