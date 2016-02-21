@@ -284,6 +284,22 @@ impl<'a> MHandler<'a> {
                 _ => return
             };
         }
+        else if msg.path.starts_with("/maschine/pad") {
+            match msg.arguments.len() {
+                3 => {
+                    if let osc::Argument::i(pad) = msg.arguments[0] {
+                      if let osc::Argument::i(color) = msg.arguments[1] {
+                          if let osc::Argument::f(brightness) = msg.arguments[2] {
+                              maschine.set_pad_light( pad as usize, (color as u32) & 0xFFFFFF, brightness as f32);
+                          }
+                      }
+                    }
+                }
+
+                _ => return
+            }
+        }
+
     }
 
     fn send_osc_msg(&self, path: &str, arguments: Vec<osc::Argument>) {
