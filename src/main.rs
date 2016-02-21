@@ -274,10 +274,9 @@ impl<'a> MHandler<'a> {
                     }),
 
                 2 => {
-                    if let osc::Argument::i(color) = msg.arguments[0] {
-                        if let osc::Argument::f(brightness) = msg.arguments[1] {
-                            maschine.set_button_light(btn, (color as u32) & 0xFFFFFF, brightness);
-                        }
+                    if let (&osc::Argument::i(color), &osc::Argument::f(brightness))
+                        = (&msg.arguments[0], &msg.arguments[1]) {
+                        maschine.set_button_light(btn, (color as u32) & 0xFFFFFF, brightness);
                     }
                 }
 
@@ -287,12 +286,9 @@ impl<'a> MHandler<'a> {
         else if msg.path.starts_with("/maschine/pad") {
             match msg.arguments.len() {
                 3 => {
-                    if let osc::Argument::i(pad) = msg.arguments[0] {
-                      if let osc::Argument::i(color) = msg.arguments[1] {
-                          if let osc::Argument::f(brightness) = msg.arguments[2] {
-                              maschine.set_pad_light( pad as usize, (color as u32) & 0xFFFFFF, brightness as f32);
-                          }
-                      }
+                    if let (&osc::Argument::i(pad), &osc::Argument::i(color), &osc::Argument::f(brightness))
+                        = (&msg.arguments[0], &msg.arguments[1], &msg.arguments[2]) {
+                        maschine.set_pad_light( pad as usize, (color as u32) & 0xFFFFFF, brightness as f32);
                     }
                 }
 
