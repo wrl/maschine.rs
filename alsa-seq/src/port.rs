@@ -34,7 +34,7 @@ use event::{
 };
 
 bitflags! {
-    flags PortCapabilities: u32 {
+    pub flags PortCapabilities: u32 {
         const PORT_CAPABILITY_DUPLEX = (1 << 4),
         const PORT_CAPABILITY_NO_EXPORT = (1 << 7),
         const PORT_CAPABILITY_READ = (1 << 0),
