@@ -16,10 +16,11 @@
 //  <http://www.gnu.org/licenses/>.
 
 use std::path::Path;
+use std::time::Duration;
 use std::env;
 
 use std::net::{
-    UdpSocket,
+    SocketAddr,
     SocketAddrV4,
     Ipv4Addr
 };
@@ -58,18 +59,18 @@ const OSC_SOCKET: mio::Token = mio::Token(1);
 
 struct EvLoopHandler<'a> {
     dev: &'a mut Maschine,
-    handler: &'a mut MHandler<'a>
+    mhandler: &'a mut MHandler<'a>
 }
 
 impl<'a> mio::Handler for EvLoopHandler<'a> {
     type Timeout = ();
     type Message = u32;
 
-    fn readable(&mut self, _: &mut mio::EventLoop<Self>,
-                token: mio::Token, _: mio::ReadHint) {
+    fn ready(&mut self, _: &mut mio::EventLoop<Self>,
+             token: mio::Token, _: mio::EventSet) {
         match token {
-            DEVICE => self.dev.readable(self.handler),
-            OSC_SOCKET => self.handler.recv_osc_msg(self.dev),
+            DEVICE => self.dev.readable(self.mhandler),
+            OSC_SOCKET => self.mhandler.recv_osc_msg(self.dev),
             _  => panic!("unexpected token")
         }
     }
@@ -82,26 +83,28 @@ impl<'a> mio::Handler for EvLoopHandler<'a> {
 
 impl<'a> EvLoopHandler<'a> {
     fn set_timeout(&self, ev_loop: &mut mio::EventLoop<Self>) {
-        ev_loop.timeout_ms((), 1).unwrap();
+        ev_loop.timeout((), Duration::from_millis(1)).unwrap();
     }
 }
 
-fn ev_loop<'a>(dev: &'a mut Maschine, handler: &'a mut MHandler<'a>) {
-    let mut config = mio::EventLoopConfig::default();
-    config.timer_tick_ms = 20;
+fn ev_loop<'a>(dev: &'a mut Maschine, mhandler: &'a mut MHandler<'a>) {
+    let mut ev_loop = {
+        let mut b = mio::EventLoopBuilder::new();
+        b.timer_tick(Duration::from_millis(20));
+        b.build()
+    }.unwrap();
 
-    let mut ev_loop = mio::EventLoop::configured(config).unwrap();
-
-    ev_loop.register(dev.get_io(), DEVICE).unwrap();
-    ev_loop.register(handler.osc_socket, OSC_SOCKET).unwrap();
+    ev_loop.register(&dev.get_fd(), DEVICE,
+        mio::EventSet::readable(), mio::PollOpt::edge()).unwrap();
+    ev_loop.register(mhandler.osc_socket, OSC_SOCKET,
+        mio::EventSet::readable(), mio::PollOpt::edge()).unwrap();
 
     let mut handler = EvLoopHandler {
         dev: dev,
-        handler: handler
+        mhandler: mhandler
     };
 
     handler.set_timeout(&mut ev_loop);
-
     ev_loop.run(&mut handler).unwrap();
 }
 
@@ -127,8 +130,8 @@ struct MHandler<'a> {
     pressure_shape: PressureShape,
     send_aftertouch: bool,
 
-    osc_socket: &'a UdpSocket,
-    osc_outgoing_addr: SocketAddrV4
+    osc_socket: &'a mio::udp::UdpSocket,
+    osc_outgoing_addr: SocketAddr
 }
 
 fn osc_button_to_btn_map(osc_button: &str) -> Option<MaschineButton> {
@@ -239,8 +242,12 @@ impl<'a> MHandler<'a> {
 
     fn recv_osc_msg(&self, maschine: &mut Maschine) {
         let mut buf = [0u8; 128];
-        let (nbytes, _) = match self.osc_socket.recv_from(&mut buf) {
-            Ok(t) => t,
+
+        let nbytes = match self.osc_socket.recv_from(&mut buf) {
+            Ok(t) => match t {
+                Some((nbytes, _)) => nbytes,
+                None => return
+            },
             Err(e) => {
                 println!(" :: error in recv_from(): {}", e);
                 return;
@@ -314,7 +321,7 @@ impl<'a> MHandler<'a> {
             arguments: arguments
         };
 
-        match self.osc_socket.send_to(&*msg.serialize().unwrap(), self.osc_outgoing_addr) {
+        match self.osc_socket.send_to(&*msg.serialize().unwrap(), &self.osc_outgoing_addr) {
             Ok(_) => {},
             Err(e) => println!(" :: error in send_to: {}", e)
         }
@@ -406,14 +413,17 @@ fn main() {
         Ok(file) => file
     };
 
-    let osc_socket = UdpSocket::bind("127.0.0.1:42434").unwrap();
+    let osc_socket = mio::udp::UdpSocket::bind(
+        &SocketAddr::V4(
+                SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42434)
+        )).unwrap();
 
     let seq_handle = SequencerHandle::open("maschine.rs", HandleOpenStreams::Output).unwrap();
     let seq_port = seq_handle.create_port(
         "Pads MIDI", PORT_CAPABILITY_READ | PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
             .unwrap();
 
-    let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
+    let mut dev = devices::mk2::Mikro::new(dev_fd);
 
     let mut handler = MHandler {
         color: Hsv::new(0.0, 1.0, 1.0),
@@ -425,7 +435,8 @@ fn main() {
         send_aftertouch: false,
 
         osc_socket: &osc_socket,
-        osc_outgoing_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435)
+        osc_outgoing_addr: SocketAddr::V4(
+            SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435))
     };
 
     dev.clear_screen();

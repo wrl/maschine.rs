@@ -55,7 +55,7 @@ pub enum MaschineButton {
 }
 
 pub trait Maschine {
-    fn get_io(&mut self) -> &mut mio::Io;
+    fn get_fd(&self) -> mio::unix::EventedFd;
 
     fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()>;
 

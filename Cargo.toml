@@ -7,14 +7,14 @@ authors = ["William Light <wrl@illest.net>"]
 lto = true
 
 [dependencies]
-mio = "0.3"
-nix = "*"
+nix = "0.6.0"
 glm = "*"
 glm_color = "*"
 midi = "*"
+tinyosc = "0.0.3"
 
-[dependencies.tinyosc]
-git = "https://github.com/wrl/tinyosc"
+[dependencies.mio]
+git = "https://github.com/carllerche/mio"
 
 [dependencies.alsa-seq]
 path = "alsa-seq"

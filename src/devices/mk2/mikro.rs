@@ -17,9 +17,12 @@
 
 use std::mem::transmute;
 use std::error::Error;
+use std::os::unix::io;
+
+extern crate nix;
+use nix::unistd;
 
 extern crate mio;
-use mio::{TryRead, TryWrite};
 
 use base::{
     Maschine,
@@ -83,7 +86,7 @@ struct ButtonReport {
 }
 
 pub struct Mikro {
-    dev: mio::Io,
+    dev: io::RawFd,
     light_buf: [u8; 79],
 
     pads: [MaschinePad; 16],
@@ -114,7 +117,7 @@ impl Mikro {
         ]
     }
 
-    pub fn new(dev: mio::Io) -> Self {
+    pub fn new(dev: io::RawFd) -> Self {
         let mut _self = Mikro {
             dev: dev,
             light_buf: [0u8; 79],
@@ -198,13 +201,12 @@ fn set_rgb_light(rgb: &mut [u8], color: u32, brightness: f32) {
 }
 
 impl Maschine for Mikro {
-    fn get_io(&mut self) -> &mut mio::Io {
-        return &mut self.dev;
+    fn get_fd(&self) -> mio::unix::EventedFd {
+        return mio::unix::EventedFd(&self.dev);
     }
 
     fn write_lights(&mut self) {
-        self.dev.write(&mut mio::buf::SliceBuf::wrap(&self.light_buf))
-            .unwrap();
+        unistd::write(self.dev, &self.light_buf).unwrap();
     }
 
     fn set_pad_light(&mut self, pad: usize, color: u32, brightness: f32) {
@@ -275,9 +277,9 @@ impl Maschine for Mikro {
     fn readable(&mut self, handler: &mut MaschineHandler) {
         let mut buf = [0u8; 256];
 
-        let nbytes = match self.dev.read(&mut mio::buf::MutSliceBuf::wrap(&mut buf)) {
+        let nbytes = match unistd::read(self.dev, &mut buf) {
             Err(err) => panic!("read failed: {}", Error::description(&err)),
-            Ok(nbytes) => nbytes.unwrap()
+            Ok(nbytes) => nbytes
         };
 
         let report_nr = buf[0];
@@ -307,8 +309,7 @@ impl Maschine for Mikro {
 
         for i in 0..4 {
             screen_buf[1] = i * 32;
-            self.dev.write(&mut mio::buf::SliceBuf::wrap(&screen_buf))
-                .unwrap();
+            unistd::write(self.dev, &screen_buf).unwrap();
         }
     }
 }
