@@ -15,7 +15,7 @@
 //  License along with this program.  If not, see
 //  <http://www.gnu.org/licenses/>.
 
-extern crate mio;
+use std::os::unix::io::RawFd;
 
 #[derive(Copy,Clone,Debug)]
 pub enum MaschineButton {
@@ -55,7 +55,7 @@ pub enum MaschineButton {
 }
 
 pub trait Maschine {
-    fn get_fd(&self) -> mio::unix::EventedFd;
+    fn get_fd(&self) -> RawFd;
 
     fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()>;
 

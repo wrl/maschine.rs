@@ -16,30 +16,33 @@
 //  <http://www.gnu.org/licenses/>.
 
 use std::path::Path;
-use std::time::Duration;
+use std::os::unix::io::AsRawFd;
 use std::env;
 
 use std::net::{
+    UdpSocket,
     SocketAddr,
     SocketAddrV4,
     Ipv4Addr
 };
 
+use std::time::{
+    Duration,
+    SystemTime
+};
+
 extern crate nix;
 use nix::fcntl::{O_RDWR, O_NONBLOCK};
 use nix::{fcntl,sys};
-
-extern crate mio;
-extern crate glm;
-extern crate glm_color;
+use nix::poll::*;
 
 extern crate midi;
 extern crate alsa_seq;
 use midi::*;
 use alsa_seq::*;
 
-use glm::ext::*;
-use glm_color::*;
+extern crate hsl;
+use hsl::HSL;
 
 #[macro_use(osc_args)]
 extern crate tinyosc;
@@ -54,58 +57,31 @@ use base::{
     MaschineButton
 };
 
-const DEVICE: mio::Token = mio::Token(0);
-const OSC_SOCKET: mio::Token = mio::Token(1);
+fn ev_loop<'a>(dev: &'a mut Maschine, mhandler: &'a mut MHandler<'a>) {
+    let mut fds = [
+        PollFd::new(dev.get_fd(), POLLIN, EventFlags::empty()),
+        PollFd::new(mhandler.osc_socket.as_raw_fd(), POLLIN, EventFlags::empty())
+    ];
 
-struct EvLoopHandler<'a> {
-    dev: &'a mut Maschine,
-    mhandler: &'a mut MHandler<'a>
-}
+    let mut now = SystemTime::now();
+    let timer_interval = Duration::from_millis(16);
 
-impl<'a> mio::Handler for EvLoopHandler<'a> {
-    type Timeout = ();
-    type Message = u32;
+    loop {
+        poll(&mut fds, -1).unwrap();
 
-    fn ready(&mut self, _: &mut mio::EventLoop<Self>,
-             token: mio::Token, _: mio::EventSet) {
-        match token {
-            DEVICE => self.dev.readable(self.mhandler),
-            OSC_SOCKET => self.mhandler.recv_osc_msg(self.dev),
-            _  => panic!("unexpected token")
+        if fds[0].revents().unwrap().contains(POLLIN) {
+            dev.readable(mhandler);
+        }
+
+        if fds[1].revents().unwrap().contains(POLLIN) {
+            mhandler.recv_osc_msg(dev);
+        }
+
+        if now.elapsed().unwrap() >= timer_interval {
+            dev.write_lights();
+            now = SystemTime::now();
         }
     }
-
-    fn timeout(&mut self, ev_loop: &mut mio::EventLoop<Self>, _: ()) {
-        self.dev.write_lights();
-        self.set_timeout(ev_loop);
-    }
-}
-
-impl<'a> EvLoopHandler<'a> {
-    fn set_timeout(&self, ev_loop: &mut mio::EventLoop<Self>) {
-        ev_loop.timeout((), Duration::from_millis(1)).unwrap();
-    }
-}
-
-fn ev_loop<'a>(dev: &'a mut Maschine, mhandler: &'a mut MHandler<'a>) {
-    let mut ev_loop = {
-        let mut b = mio::EventLoopBuilder::new();
-        b.timer_tick(Duration::from_millis(20));
-        b.build()
-    }.unwrap();
-
-    ev_loop.register(&dev.get_fd(), DEVICE,
-        mio::EventSet::readable(), mio::PollOpt::edge()).unwrap();
-    ev_loop.register(mhandler.osc_socket, OSC_SOCKET,
-        mio::EventSet::readable(), mio::PollOpt::edge()).unwrap();
-
-    let mut handler = EvLoopHandler {
-        dev: dev,
-        mhandler: mhandler
-    };
-
-    handler.set_timeout(&mut ev_loop);
-    ev_loop.run(&mut handler).unwrap();
 }
 
 fn usage(prog_name: &String) {
@@ -116,13 +92,13 @@ const PAD_RELEASED_BRIGHTNESS: f32 = 0.015;
 
 #[allow(dead_code)]
 enum PressureShape {
-    None,
+    Linear,
     Exponential(f32),
     Constant(f32)
 }
 
 struct MHandler<'a> {
-    color: Hsv,
+    color: HSL,
 
     seq_handle: &'a SequencerHandle,
     seq_port: &'a SequencerPort<'a>,
@@ -130,7 +106,7 @@ struct MHandler<'a> {
     pressure_shape: PressureShape,
     send_aftertouch: bool,
 
-    osc_socket: &'a mio::udp::UdpSocket,
+    osc_socket: &'a UdpSocket,
     osc_outgoing_addr: SocketAddr
 }
 
@@ -214,21 +190,22 @@ fn btn_to_osc_button_map(btn: MaschineButton) -> &'static str {
 
 impl<'a> MHandler<'a> {
     fn pad_color(&self) -> u32 {
-        let rgb = self.color.to_rgb();
+        let (r, g, b) = self.color.to_rgb();
 
-        ((((rgb.red() * 255.0) as u32) << 16)
-         | (((rgb.green() * 255.0) as u32) << 8)
-         | ((rgb.blue() * 255.0) as u32))
+        (((r as u32) << 16)
+         | ((g as u32) << 8)
+         | (b as u32))
     }
 
     fn pressure_to_vel(&self, pressure: f32) -> U7 {
         (match self.pressure_shape {
-            PressureShape::None => pressure,
+            PressureShape::Linear => pressure,
             PressureShape::Exponential(power) => pressure.powf(power),
             PressureShape::Constant(c_pressure) => c_pressure
         } * 127.0) as U7
     }
 
+    #[allow(dead_code)]
     fn update_pad_colors(&self, maschine: &mut Maschine) {
         for i in 0..16 {
             let brightness = match maschine.get_pad_pressure(i).unwrap() {
@@ -244,10 +221,7 @@ impl<'a> MHandler<'a> {
         let mut buf = [0u8; 128];
 
         let nbytes = match self.osc_socket.recv_from(&mut buf) {
-            Ok(t) => match t {
-                Some((nbytes, _)) => nbytes,
-                None => return
-            },
+            Ok((nbytes, _)) => nbytes,
             Err(e) => {
                 println!(" :: error in recv_from(): {}", e);
                 return;
@@ -413,10 +387,7 @@ fn main() {
         Ok(file) => file
     };
 
-    let osc_socket = mio::udp::UdpSocket::bind(
-        &SocketAddr::V4(
-                SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42434)
-        )).unwrap();
+    let osc_socket = UdpSocket::bind("127.0.0.1:42434").unwrap();
 
     let seq_handle = SequencerHandle::open("maschine.rs", HandleOpenStreams::Output).unwrap();
     let seq_port = seq_handle.create_port(
@@ -426,7 +397,11 @@ fn main() {
     let mut dev = devices::mk2::Mikro::new(dev_fd);
 
     let mut handler = MHandler {
-        color: Hsv::new(0.0, 1.0, 1.0),
+        color: HSL {
+            h: 0.0,
+            s: 1.0,
+            l: 1.0
+        },
 
         seq_port: &seq_port,
         seq_handle: &seq_handle,

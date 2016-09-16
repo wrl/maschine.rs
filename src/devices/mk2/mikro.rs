@@ -22,8 +22,6 @@ use std::os::unix::io;
 extern crate nix;
 use nix::unistd;
 
-extern crate mio;
-
 use base::{
     Maschine,
     MaschineHandler,
@@ -201,8 +199,8 @@ fn set_rgb_light(rgb: &mut [u8], color: u32, brightness: f32) {
 }
 
 impl Maschine for Mikro {
-    fn get_fd(&self) -> mio::unix::EventedFd {
-        return mio::unix::EventedFd(&self.dev);
+    fn get_fd(&self) -> io::RawFd {
+        return self.dev;
     }
 
     fn write_lights(&mut self) {
