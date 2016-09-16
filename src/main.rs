@@ -400,7 +400,7 @@ fn main() {
         color: HSL {
             h: 0.0,
             s: 1.0,
-            l: 1.0
+            l: 0.3
         },
 
         seq_port: &seq_port,
