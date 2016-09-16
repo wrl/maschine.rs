@@ -67,7 +67,7 @@ fn ev_loop<'a>(dev: &'a mut Maschine, mhandler: &'a mut MHandler<'a>) {
     let timer_interval = Duration::from_millis(16);
 
     loop {
-        poll(&mut fds, -1).unwrap();
+        poll(&mut fds, 16).unwrap();
 
         if fds[0].revents().unwrap().contains(POLLIN) {
             dev.readable(mhandler);
