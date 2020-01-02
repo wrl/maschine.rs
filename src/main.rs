@@ -391,7 +391,7 @@ fn main() {
 
     let seq_handle = SequencerHandle::open("maschine.rs", HandleOpenStreams::Output).unwrap();
     let seq_port = seq_handle.create_port(
-        "Pads MIDI", PORT_CAPABILITY_READ | PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
+        "Pads MIDI", PortCapabilities::PORT_CAPABILITY_READ | PortCapabilities::PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
             .unwrap();
 
     let mut dev = devices::mk2::Mikro::new(dev_fd);

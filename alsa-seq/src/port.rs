@@ -34,14 +34,14 @@ use event::{
 };
 
 bitflags! {
-    pub flags PortCapabilities: u32 {
-        const PORT_CAPABILITY_DUPLEX = (1 << 4),
-        const PORT_CAPABILITY_NO_EXPORT = (1 << 7),
-        const PORT_CAPABILITY_READ = (1 << 0),
-        const PORT_CAPABILITY_SUBS_READ = (1 << 5),
-        const PORT_CAPABILITY_SUBS_WRITE = (1 << 6),
-        const PORT_CAPABILITY_SYNC_READ = (1 << 2),
-        const PORT_CAPABILITY_SYNC_WRITE = (1 << 3)
+    pub struct PortCapabilities: u32 {
+        const PORT_CAPABILITY_DUPLEX = (1 << 4);
+        const PORT_CAPABILITY_NO_EXPORT = (1 << 7);
+        const PORT_CAPABILITY_READ = (1 << 0);
+        const PORT_CAPABILITY_SUBS_READ = (1 << 5);
+        const PORT_CAPABILITY_SUBS_WRITE = (1 << 6);
+        const PORT_CAPABILITY_SYNC_READ = (1 << 2);
+        const PORT_CAPABILITY_SYNC_WRITE = (1 << 3);
     }
 }
 
