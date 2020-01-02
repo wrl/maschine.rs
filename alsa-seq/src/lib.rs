@@ -52,15 +52,7 @@ pub use handle::{
 
 pub use port::{
     PortType,
-    PortCapabilities,
-
-    PORT_CAPABILITY_DUPLEX,
-    PORT_CAPABILITY_NO_EXPORT,
-    PORT_CAPABILITY_READ,
-    PORT_CAPABILITY_SUBS_READ,
-    PORT_CAPABILITY_SUBS_WRITE,
-    PORT_CAPABILITY_SYNC_READ,
-    PORT_CAPABILITY_SYNC_WRITE
+    PortCapabilities
 };
 
 mod event;
