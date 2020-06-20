@@ -35,8 +35,8 @@ const SND_SEQ_QUEUE_DIRECT: c_uchar = 253;
 const SND_SEQ_ADDRESS_SUBSCRIBERS: c_uchar = 254;
 const SND_SEQ_ADDRESS_UNKNOWN: c_uchar = 253;
 
-const SND_SEQ_EVENT_LENGTH_MASK: c_uint = (3 << 2);
-const SND_SEQ_EVENT_LENGTH_FIXED: c_uint = (0 << 2);
+const SND_SEQ_EVENT_LENGTH_MASK: c_uint = 3 << 2;
+const SND_SEQ_EVENT_LENGTH_FIXED: c_uint = 0 << 2;
 
 pub trait TransliteratedFromCMacros {
     fn set_fixed(&mut self);

@@ -16,7 +16,6 @@
 //  <http://www.gnu.org/licenses/>.
 
 use std::mem::transmute;
-use std::error::Error;
 use std::os::unix::io;
 
 extern crate nix;
@@ -130,7 +129,7 @@ impl Mikro {
         return _self;
     }
 
-    fn read_buttons(&mut self, handler: &mut MaschineHandler, buf: &[u8]) {
+    fn read_buttons(&mut self, handler: &mut dyn MaschineHandler, buf: &[u8]) {
         for (idx, &byte) in buf[0..4].iter().enumerate() {
             let mut diff = (byte ^ self.buttons[idx]) as u32;
 
@@ -168,7 +167,7 @@ impl Mikro {
         self.buttons[4] = buf[4];
     }
 
-    fn read_pads(&mut self, handler: &mut MaschineHandler, buf: &[u8]) {
+    fn read_pads(&mut self, handler: &mut dyn MaschineHandler, buf: &[u8]) {
         let pads: &[u16] = unsafe { transmute(buf) };
 
         for i in 0..16 {
@@ -272,11 +271,11 @@ impl Maschine for Mikro {
         self.light_buf[idx] = (brightness * 255.0) as u8;
     }
 
-    fn readable(&mut self, handler: &mut MaschineHandler) {
+    fn readable(&mut self, handler: &mut dyn MaschineHandler) {
         let mut buf = [0u8; 256];
 
         let nbytes = match unistd::read(self.dev, &mut buf) {
-            Err(err) => panic!("read failed: {}", Error::description(&err)),
+            Err(err) => panic!("read failed: {}", err.to_string()),
             Ok(nbytes) => nbytes
         };
 
@@ -292,7 +291,7 @@ impl Maschine for Mikro {
 
     fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()> {
         match pad_idx {
-            0 ... 15 => Ok(self.pads[pad_idx].get_pressure()),
+            0 ..= 15 => Ok(self.pads[pad_idx].get_pressure()),
             _ => Err(())
         }
     }

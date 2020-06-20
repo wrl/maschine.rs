@@ -57,7 +57,7 @@ use base::{
     MaschineButton
 };
 
-fn ev_loop<'a>(dev: &'a mut Maschine, mhandler: &'a mut MHandler<'a>) {
+fn ev_loop(dev: &mut dyn Maschine, mhandler: &mut MHandler) {
     let mut fds = [
         PollFd::new(dev.get_fd(), POLLIN, EventFlags::empty()),
         PollFd::new(mhandler.osc_socket.as_raw_fd(), POLLIN, EventFlags::empty())
@@ -192,9 +192,9 @@ impl<'a> MHandler<'a> {
     fn pad_color(&self) -> u32 {
         let (r, g, b) = self.color.to_rgb();
 
-        (((r as u32) << 16)
-         | ((g as u32) << 8)
-         | (b as u32))
+          ((r as u32) << 16)
+        | ((g as u32) << 8)
+        |  (b as u32)
     }
 
     fn pressure_to_vel(&self, pressure: f32) -> U7 {
@@ -206,10 +206,10 @@ impl<'a> MHandler<'a> {
     }
 
     #[allow(dead_code)]
-    fn update_pad_colors(&self, maschine: &mut Maschine) {
+    fn update_pad_colors(&self, maschine: &mut dyn Maschine) {
         for i in 0..16 {
             let brightness = match maschine.get_pad_pressure(i).unwrap() {
-                0.0 => PAD_RELEASED_BRIGHTNESS,
+                b if b == 0.0 => PAD_RELEASED_BRIGHTNESS,
                 pressure @ _ => pressure.sqrt()
             };
 
@@ -217,7 +217,7 @@ impl<'a> MHandler<'a> {
         }
     }
 
-    fn recv_osc_msg(&self, maschine: &mut Maschine) {
+    fn recv_osc_msg(&self, maschine: &mut dyn Maschine) {
         let mut buf = [0u8; 128];
 
         let nbytes = match self.osc_socket.recv_from(&mut buf) {
@@ -239,7 +239,7 @@ impl<'a> MHandler<'a> {
         self.handle_osc_messge(maschine, &msg);
     }
 
-    fn handle_osc_messge(&self, maschine: &mut Maschine, msg: &osc::Message) {
+    fn handle_osc_messge(&self, maschine: &mut dyn Maschine, msg: &osc::Message) {
         if msg.path.starts_with("/maschine/button") {
             let btn = match osc_button_to_btn_map(&msg.path[17 ..]) {
                 Some(btn) => btn,
@@ -320,7 +320,7 @@ const PAD_NOTE_MAP: [U7; 16] = [
 ];
 
 impl<'a> MaschineHandler for MHandler<'a> {
-    fn pad_pressed(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
+    fn pad_pressed(&mut self, maschine: &mut dyn Maschine, pad_idx: usize, pressure: f32) {
         let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
         let msg = Message::NoteOn(Ch1, midi_note, self.pressure_to_vel(pressure));
 
@@ -330,7 +330,7 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), pressure.sqrt());
     }
 
-    fn pad_aftertouch(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
+    fn pad_aftertouch(&mut self, maschine: &mut dyn Maschine, pad_idx: usize, pressure: f32) {
         match self.pressure_shape {
             PressureShape::Constant(_) => return,
             _ => {}
@@ -350,7 +350,7 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), pressure.sqrt());
     }
 
-    fn pad_released(&mut self, maschine: &mut Maschine, pad_idx: usize) {
+    fn pad_released(&mut self, maschine: &mut dyn Maschine, pad_idx: usize) {
         let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
         let msg = Message::NoteOff(Ch1, midi_note, 0);
         self.seq_port.send_message(&msg).unwrap();
@@ -359,15 +359,15 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), PAD_RELEASED_BRIGHTNESS);
     }
 
-    fn encoder_step(&mut self, _: &mut Maschine, _: usize, delta: i32) {
+    fn encoder_step(&mut self, _: &mut dyn Maschine, _: usize, delta: i32) {
         self.send_osc_encoder_msg(delta);
     }
 
-    fn button_down(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_down(&mut self, _: &mut dyn Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 1);
     }
 
-    fn button_up(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_up(&mut self, _: &mut dyn Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 0);
     }
 }

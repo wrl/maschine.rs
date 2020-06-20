@@ -47,21 +47,21 @@ bitflags! {
 
 #[repr(C)]
 pub enum PortType {
-    Application = (1 << 20),
-    DirectSample = (1 << 11),
-    Hardware = (1 << 16),
-    MidiGeneric = (1 << 1),
-    MidiGM = (1 << 2),
-    MidiGM2 = (1 << 6),
-    MidiGS = (1 << 3),
-    MidiMT32 = (1 << 5),
-    MidiXG = (1 << 4),
-    Port = (1 << 19),
-    Sample = (1 << 12),
-    Software = (1 << 17),
-    Specific = (1 << 0),
-    Synth = (1 << 10),
-    Synthesizer = (1 << 18)
+    Application = 1 << 20,
+    DirectSample = 1 << 11,
+    Hardware = 1 << 16,
+    MidiGeneric = 1 << 1,
+    MidiGM = 1 << 2,
+    MidiGM2 = 1 << 6,
+    MidiGS = 1 << 3,
+    MidiMT32 = 1 << 5,
+    MidiXG = 1 << 4,
+    Port = 1 << 19,
+    Sample = 1 << 12,
+    Software = 1 << 17,
+    Specific = 1 << 0,
+    Synth = 1 << 10,
+    Synthesizer = 1 << 18
 }
 
 impl<'handle> SequencerPort<'handle> {
