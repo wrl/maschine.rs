@@ -16,29 +16,33 @@
 //  <http://www.gnu.org/licenses/>.
 
 use std::path::Path;
+use std::os::unix::io::AsRawFd;
 use std::env;
 
 use std::net::{
     UdpSocket,
+    SocketAddr,
     SocketAddrV4,
     Ipv4Addr
+};
+
+use std::time::{
+    Duration,
+    SystemTime
 };
 
 extern crate nix;
 use nix::fcntl::{O_RDWR, O_NONBLOCK};
 use nix::{fcntl,sys};
-
-extern crate mio;
-extern crate glm;
-extern crate glm_color;
+use nix::poll::*;
 
 extern crate midi;
 extern crate alsa_seq;
 use midi::*;
 use alsa_seq::*;
 
-use glm::ext::*;
-use glm_color::*;
+extern crate hsl;
+use hsl::HSL;
 
 #[macro_use(osc_args)]
 extern crate tinyosc;
@@ -53,56 +57,31 @@ use base::{
     MaschineButton
 };
 
-const DEVICE: mio::Token = mio::Token(0);
-const OSC_SOCKET: mio::Token = mio::Token(1);
+fn ev_loop(dev: &mut dyn Maschine, mhandler: &mut MHandler) {
+    let mut fds = [
+        PollFd::new(dev.get_fd(), POLLIN, EventFlags::empty()),
+        PollFd::new(mhandler.osc_socket.as_raw_fd(), POLLIN, EventFlags::empty())
+    ];
 
-struct EvLoopHandler<'a> {
-    dev: &'a mut Maschine,
-    handler: &'a mut MHandler<'a>
-}
+    let mut now = SystemTime::now();
+    let timer_interval = Duration::from_millis(16);
 
-impl<'a> mio::Handler for EvLoopHandler<'a> {
-    type Timeout = ();
-    type Message = u32;
+    loop {
+        poll(&mut fds, 16).unwrap();
 
-    fn readable(&mut self, _: &mut mio::EventLoop<Self>,
-                token: mio::Token, _: mio::ReadHint) {
-        match token {
-            DEVICE => self.dev.readable(self.handler),
-            OSC_SOCKET => self.handler.recv_osc_msg(self.dev),
-            _  => panic!("unexpected token")
+        if fds[0].revents().unwrap().contains(POLLIN) {
+            dev.readable(mhandler);
+        }
+
+        if fds[1].revents().unwrap().contains(POLLIN) {
+            mhandler.recv_osc_msg(dev);
+        }
+
+        if now.elapsed().unwrap() >= timer_interval {
+            dev.write_lights();
+            now = SystemTime::now();
         }
     }
-
-    fn timeout(&mut self, ev_loop: &mut mio::EventLoop<Self>, _: ()) {
-        self.dev.write_lights();
-        self.set_timeout(ev_loop);
-    }
-}
-
-impl<'a> EvLoopHandler<'a> {
-    fn set_timeout(&self, ev_loop: &mut mio::EventLoop<Self>) {
-        ev_loop.timeout_ms((), 1).unwrap();
-    }
-}
-
-fn ev_loop<'a>(dev: &'a mut Maschine, handler: &'a mut MHandler<'a>) {
-    let mut config = mio::EventLoopConfig::default();
-    config.timer_tick_ms = 20;
-
-    let mut ev_loop = mio::EventLoop::configured(config).unwrap();
-
-    ev_loop.register(dev.get_io(), DEVICE).unwrap();
-    ev_loop.register(handler.osc_socket, OSC_SOCKET).unwrap();
-
-    let mut handler = EvLoopHandler {
-        dev: dev,
-        handler: handler
-    };
-
-    handler.set_timeout(&mut ev_loop);
-
-    ev_loop.run(&mut handler).unwrap();
 }
 
 fn usage(prog_name: &String) {
@@ -113,13 +92,13 @@ const PAD_RELEASED_BRIGHTNESS: f32 = 0.015;
 
 #[allow(dead_code)]
 enum PressureShape {
-    None,
+    Linear,
     Exponential(f32),
     Constant(f32)
 }
 
 struct MHandler<'a> {
-    color: Hsv,
+    color: HSL,
 
     seq_handle: &'a SequencerHandle,
     seq_port: &'a SequencerPort<'a>,
@@ -128,7 +107,7 @@ struct MHandler<'a> {
     send_aftertouch: bool,
 
     osc_socket: &'a UdpSocket,
-    osc_outgoing_addr: SocketAddrV4
+    osc_outgoing_addr: SocketAddr
 }
 
 fn osc_button_to_btn_map(osc_button: &str) -> Option<MaschineButton> {
@@ -211,25 +190,26 @@ fn btn_to_osc_button_map(btn: MaschineButton) -> &'static str {
 
 impl<'a> MHandler<'a> {
     fn pad_color(&self) -> u32 {
-        let rgb = self.color.to_rgb();
+        let (r, g, b) = self.color.to_rgb();
 
-        ((((rgb.red() * 255.0) as u32) << 16)
-         | (((rgb.green() * 255.0) as u32) << 8)
-         | ((rgb.blue() * 255.0) as u32))
+          ((r as u32) << 16)
+        | ((g as u32) << 8)
+        |  (b as u32)
     }
 
     fn pressure_to_vel(&self, pressure: f32) -> U7 {
         (match self.pressure_shape {
-            PressureShape::None => pressure,
+            PressureShape::Linear => pressure,
             PressureShape::Exponential(power) => pressure.powf(power),
             PressureShape::Constant(c_pressure) => c_pressure
         } * 127.0) as U7
     }
 
-    fn update_pad_colors(&self, maschine: &mut Maschine) {
+    #[allow(dead_code)]
+    fn update_pad_colors(&self, maschine: &mut dyn Maschine) {
         for i in 0..16 {
             let brightness = match maschine.get_pad_pressure(i).unwrap() {
-                0.0 => PAD_RELEASED_BRIGHTNESS,
+                b if b == 0.0 => PAD_RELEASED_BRIGHTNESS,
                 pressure @ _ => pressure.sqrt()
             };
 
@@ -237,10 +217,11 @@ impl<'a> MHandler<'a> {
         }
     }
 
-    fn recv_osc_msg(&self, maschine: &mut Maschine) {
+    fn recv_osc_msg(&self, maschine: &mut dyn Maschine) {
         let mut buf = [0u8; 128];
-        let (nbytes, _) = match self.osc_socket.recv_from(&mut buf) {
-            Ok(t) => t,
+
+        let nbytes = match self.osc_socket.recv_from(&mut buf) {
+            Ok((nbytes, _)) => nbytes,
             Err(e) => {
                 println!(" :: error in recv_from(): {}", e);
                 return;
@@ -258,7 +239,7 @@ impl<'a> MHandler<'a> {
         self.handle_osc_messge(maschine, &msg);
     }
 
-    fn handle_osc_messge(&self, maschine: &mut Maschine, msg: &osc::Message) {
+    fn handle_osc_messge(&self, maschine: &mut dyn Maschine, msg: &osc::Message) {
         if msg.path.starts_with("/maschine/button") {
             let btn = match osc_button_to_btn_map(&msg.path[17 ..]) {
                 Some(btn) => btn,
@@ -314,7 +295,7 @@ impl<'a> MHandler<'a> {
             arguments: arguments
         };
 
-        match self.osc_socket.send_to(&*msg.serialize().unwrap(), self.osc_outgoing_addr) {
+        match self.osc_socket.send_to(&*msg.serialize().unwrap(), &self.osc_outgoing_addr) {
             Ok(_) => {},
             Err(e) => println!(" :: error in send_to: {}", e)
         }
@@ -339,7 +320,7 @@ const PAD_NOTE_MAP: [U7; 16] = [
 ];
 
 impl<'a> MaschineHandler for MHandler<'a> {
-    fn pad_pressed(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
+    fn pad_pressed(&mut self, maschine: &mut dyn Maschine, pad_idx: usize, pressure: f32) {
         let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
         let msg = Message::NoteOn(Ch1, midi_note, self.pressure_to_vel(pressure));
 
@@ -349,7 +330,7 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), pressure.sqrt());
     }
 
-    fn pad_aftertouch(&mut self, maschine: &mut Maschine, pad_idx: usize, pressure: f32) {
+    fn pad_aftertouch(&mut self, maschine: &mut dyn Maschine, pad_idx: usize, pressure: f32) {
         match self.pressure_shape {
             PressureShape::Constant(_) => return,
             _ => {}
@@ -369,7 +350,7 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), pressure.sqrt());
     }
 
-    fn pad_released(&mut self, maschine: &mut Maschine, pad_idx: usize) {
+    fn pad_released(&mut self, maschine: &mut dyn Maschine, pad_idx: usize) {
         let midi_note = maschine.get_midi_note_base() + PAD_NOTE_MAP[pad_idx];
         let msg = Message::NoteOff(Ch1, midi_note, 0);
         self.seq_port.send_message(&msg).unwrap();
@@ -378,15 +359,15 @@ impl<'a> MaschineHandler for MHandler<'a> {
         maschine.set_pad_light(pad_idx, self.pad_color(), PAD_RELEASED_BRIGHTNESS);
     }
 
-    fn encoder_step(&mut self, _: &mut Maschine, _: usize, delta: i32) {
+    fn encoder_step(&mut self, _: &mut dyn Maschine, _: usize, delta: i32) {
         self.send_osc_encoder_msg(delta);
     }
 
-    fn button_down(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_down(&mut self, _: &mut dyn Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 1);
     }
 
-    fn button_up(&mut self, _: &mut Maschine, btn: MaschineButton) {
+    fn button_up(&mut self, _: &mut dyn Maschine, btn: MaschineButton) {
         self.send_osc_button_msg(btn, 0);
     }
 }
@@ -410,13 +391,17 @@ fn main() {
 
     let seq_handle = SequencerHandle::open("maschine.rs", HandleOpenStreams::Output).unwrap();
     let seq_port = seq_handle.create_port(
-        "Pads MIDI", PORT_CAPABILITY_READ | PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
+        "Pads MIDI", PortCapabilities::PORT_CAPABILITY_READ | PortCapabilities::PORT_CAPABILITY_SUBS_READ, PortType::MidiGeneric)
             .unwrap();
 
-    let mut dev = devices::mk2::Mikro::new(mio::Io::new(dev_fd));
+    let mut dev = devices::mk2::Mikro::new(dev_fd);
 
     let mut handler = MHandler {
-        color: Hsv::new(0.0, 1.0, 1.0),
+        color: HSL {
+            h: 0.0,
+            s: 1.0,
+            l: 0.3
+        },
 
         seq_port: &seq_port,
         seq_handle: &seq_handle,
@@ -425,7 +410,8 @@ fn main() {
         send_aftertouch: false,
 
         osc_socket: &osc_socket,
-        osc_outgoing_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435)
+        osc_outgoing_addr: SocketAddr::V4(
+            SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42435))
     };
 
     dev.clear_screen();

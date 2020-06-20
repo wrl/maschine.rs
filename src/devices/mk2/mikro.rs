@@ -16,10 +16,10 @@
 //  <http://www.gnu.org/licenses/>.
 
 use std::mem::transmute;
-use std::error::Error;
+use std::os::unix::io;
 
-extern crate mio;
-use mio::{TryRead, TryWrite};
+extern crate nix;
+use nix::unistd;
 
 use base::{
     Maschine,
@@ -83,7 +83,7 @@ struct ButtonReport {
 }
 
 pub struct Mikro {
-    dev: mio::Io,
+    dev: io::RawFd,
     light_buf: [u8; 79],
 
     pads: [MaschinePad; 16],
@@ -114,7 +114,7 @@ impl Mikro {
         ]
     }
 
-    pub fn new(dev: mio::Io) -> Self {
+    pub fn new(dev: io::RawFd) -> Self {
         let mut _self = Mikro {
             dev: dev,
             light_buf: [0u8; 79],
@@ -129,7 +129,7 @@ impl Mikro {
         return _self;
     }
 
-    fn read_buttons(&mut self, handler: &mut MaschineHandler, buf: &[u8]) {
+    fn read_buttons(&mut self, handler: &mut dyn MaschineHandler, buf: &[u8]) {
         for (idx, &byte) in buf[0..4].iter().enumerate() {
             let mut diff = (byte ^ self.buttons[idx]) as u32;
 
@@ -167,7 +167,7 @@ impl Mikro {
         self.buttons[4] = buf[4];
     }
 
-    fn read_pads(&mut self, handler: &mut MaschineHandler, buf: &[u8]) {
+    fn read_pads(&mut self, handler: &mut dyn MaschineHandler, buf: &[u8]) {
         let pads: &[u16] = unsafe { transmute(buf) };
 
         for i in 0..16 {
@@ -198,13 +198,12 @@ fn set_rgb_light(rgb: &mut [u8], color: u32, brightness: f32) {
 }
 
 impl Maschine for Mikro {
-    fn get_io(&mut self) -> &mut mio::Io {
-        return &mut self.dev;
+    fn get_fd(&self) -> io::RawFd {
+        return self.dev;
     }
 
     fn write_lights(&mut self) {
-        self.dev.write(&mut mio::buf::SliceBuf::wrap(&self.light_buf))
-            .unwrap();
+        unistd::write(self.dev, &self.light_buf).unwrap();
     }
 
     fn set_pad_light(&mut self, pad: usize, color: u32, brightness: f32) {
@@ -272,12 +271,12 @@ impl Maschine for Mikro {
         self.light_buf[idx] = (brightness * 255.0) as u8;
     }
 
-    fn readable(&mut self, handler: &mut MaschineHandler) {
+    fn readable(&mut self, handler: &mut dyn MaschineHandler) {
         let mut buf = [0u8; 256];
 
-        let nbytes = match self.dev.read(&mut mio::buf::MutSliceBuf::wrap(&mut buf)) {
-            Err(err) => panic!("read failed: {}", Error::description(&err)),
-            Ok(nbytes) => nbytes.unwrap()
+        let nbytes = match unistd::read(self.dev, &mut buf) {
+            Err(err) => panic!("read failed: {}", err.to_string()),
+            Ok(nbytes) => nbytes
         };
 
         let report_nr = buf[0];
@@ -292,7 +291,7 @@ impl Maschine for Mikro {
 
     fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()> {
         match pad_idx {
-            0 ... 15 => Ok(self.pads[pad_idx].get_pressure()),
+            0 ..= 15 => Ok(self.pads[pad_idx].get_pressure()),
             _ => Err(())
         }
     }
@@ -307,8 +306,7 @@ impl Maschine for Mikro {
 
         for i in 0..4 {
             screen_buf[1] = i * 32;
-            self.dev.write(&mut mio::buf::SliceBuf::wrap(&screen_buf))
-                .unwrap();
+            unistd::write(self.dev, &screen_buf).unwrap();
         }
     }
 }

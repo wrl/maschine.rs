@@ -15,7 +15,7 @@
 //  License along with this program.  If not, see
 //  <http://www.gnu.org/licenses/>.
 
-extern crate mio;
+use std::os::unix::io::RawFd;
 
 #[derive(Copy,Clone,Debug)]
 pub enum MaschineButton {
@@ -55,7 +55,7 @@ pub enum MaschineButton {
 }
 
 pub trait Maschine {
-    fn get_io(&mut self) -> &mut mio::Io;
+    fn get_fd(&self) -> RawFd;
 
     fn get_pad_pressure(&self, pad_idx: usize) -> Result<f32, ()>;
 
@@ -65,7 +65,7 @@ pub trait Maschine {
     fn set_pad_light(&mut self, pad_idx: usize, color: u32, brightness: f32);
     fn set_button_light(&mut self, btn: MaschineButton, color: u32, brightness: f32);
 
-    fn readable(&mut self, &mut MaschineHandler);
+    fn readable(&mut self, &mut dyn MaschineHandler);
 
     fn clear_screen(&mut self);
     fn write_lights(&mut self);
@@ -73,12 +73,12 @@ pub trait Maschine {
 
 #[allow(unused_variables)]
 pub trait MaschineHandler {
-    fn pad_pressed(&mut self, &mut Maschine, pad_idx: usize, pressure: f32) {}
-    fn pad_aftertouch(&mut self, &mut Maschine, pad_idx: usize, pressure: f32) {}
-    fn pad_released(&mut self, &mut Maschine, pad_idx: usize) {}
+    fn pad_pressed(&mut self, &mut dyn Maschine, pad_idx: usize, pressure: f32) {}
+    fn pad_aftertouch(&mut self, &mut dyn Maschine, pad_idx: usize, pressure: f32) {}
+    fn pad_released(&mut self, &mut dyn Maschine, pad_idx: usize) {}
 
-    fn encoder_step(&mut self, &mut Maschine, encoder_idx: usize, delta: i32) {}
+    fn encoder_step(&mut self, &mut dyn Maschine, encoder_idx: usize, delta: i32) {}
 
-    fn button_down(&mut self, &mut Maschine, button: MaschineButton) {}
-    fn button_up(&mut self, &mut Maschine, button: MaschineButton) {}
+    fn button_down(&mut self, &mut dyn Maschine, button: MaschineButton) {}
+    fn button_up(&mut self, &mut dyn Maschine, button: MaschineButton) {}
 }

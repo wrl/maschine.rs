@@ -6,6 +6,6 @@ license = "MIT"
 
 [dependencies]
 libc = "*"
-bitflags = "*"
-alsa-sys = "*"
+bitflags = "1.2"
+alsa-sys = "0.1"
 midi = "*"
