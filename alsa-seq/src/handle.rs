@@ -50,7 +50,7 @@ impl SequencerHandle {
         };
 
         unsafe {
-            let err = snd_seq_open(&mut inst.raw_handle, b"default\0".as_ptr() as *const i8,
+            let err = snd_seq_open(&mut inst.raw_handle, b"default\0".as_ptr() as *const u8,
                                    streams as i32, 0);
 
             if err != 0 {
